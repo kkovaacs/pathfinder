@@ -1,0 +1,10 @@
+[package]
+name = "p2p_discovery"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libp2p = { version = "0.46.1", default-features = false, features = ["identify", "gossipsub", "noise", "ping", "rendezvous", "dns-tokio", "tcp-tokio", "yamux"] }
+tokio = "1.20.1"
