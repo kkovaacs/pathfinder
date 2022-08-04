@@ -1,34 +1,23 @@
-// Copyright 2021 COMIT Network.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
+use libp2p::gossipsub::GossipsubEvent;
+use libp2p::gossipsub::GossipsubMessage;
+use libp2p::gossipsub::MessageAuthenticity;
+use libp2p::gossipsub::MessageId;
+use libp2p::gossipsub::{Gossipsub, IdentTopic};
 use libp2p::identify::Identify;
 use libp2p::identify::IdentifyConfig;
 use libp2p::identify::IdentifyEvent;
+use libp2p::identity::ed25519;
 use libp2p::ping;
 use libp2p::ping::{Ping, PingEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
-use libp2p::{development_transport, rendezvous};
+use libp2p::{rendezvous, tokio_development_transport};
 
 /// Examples for the rendezvous protocol:
 ///
@@ -42,22 +31,45 @@ use libp2p::{development_transport, rendezvous};
 async fn main() {
     env_logger::init();
 
-    let bytes = [0u8; 32];
-    let key = identity::ed25519::SecretKey::from_bytes(bytes).expect("we always pass 32 bytes");
-    let identity = identity::Keypair::Ed25519(key.into());
+    let identity = identity::Keypair::Ed25519(ed25519::Keypair::generate());
 
-    let mut swarm = Swarm::new(
-        development_transport(identity.clone()).await.unwrap(),
-        MyBehaviour {
-            identify: Identify::new(IdentifyConfig::new(
-                "rendezvous-example/1.0.0".to_string(),
-                identity.public(),
-            )),
-            rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: Ping::new(ping::Config::new().with_keep_alive(true)),
-        },
-        PeerId::from(identity.public()),
-    );
+    let mut swarm = {
+        let message_id_fn = |message: &GossipsubMessage| {
+            let mut s = DefaultHasher::new();
+            message.data.hash(&mut s);
+            MessageId::from(s.finish().to_string())
+        };
+        let gossipsub_config = libp2p::gossipsub::GossipsubConfigBuilder::default()
+            .message_id_fn(message_id_fn)
+            .build()
+            .expect("valid gossipsub config");
+
+        let mut gossipsub = Gossipsub::new(
+            MessageAuthenticity::Signed(identity.clone()),
+            gossipsub_config,
+        )
+        .expect("valid gossipsub params");
+
+        let topic = IdentTopic::new("_starknet_nodes/SN_GOERLI");
+
+        gossipsub.subscribe(&topic).unwrap();
+
+        Swarm::new(
+            tokio_development_transport(identity.clone()).unwrap(),
+            MyBehaviour {
+                identify: Identify::new(IdentifyConfig::new(
+                    "starknet/0.1.0".to_string(),
+                    identity.public(),
+                )),
+                rendezvous: rendezvous::server::Behaviour::new(
+                    rendezvous::server::Config::default(),
+                ),
+                ping: Ping::new(ping::Config::new().with_keep_alive(true)),
+                gossipsub,
+            },
+            PeerId::from(identity.public()),
+        )
+    };
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
@@ -106,6 +118,7 @@ enum MyEvent {
     Rendezvous(rendezvous::server::Event),
     Ping(PingEvent),
     Identify(IdentifyEvent),
+    Gossipsub(GossipsubEvent),
 }
 
 impl From<rendezvous::server::Event> for MyEvent {
@@ -126,6 +139,12 @@ impl From<IdentifyEvent> for MyEvent {
     }
 }
 
+impl From<GossipsubEvent> for MyEvent {
+    fn from(event: GossipsubEvent) -> Self {
+        MyEvent::Gossipsub(event)
+    }
+}
+
 #[derive(NetworkBehaviour)]
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
@@ -133,4 +152,5 @@ struct MyBehaviour {
     identify: Identify,
     rendezvous: rendezvous::server::Behaviour,
     ping: Ping,
+    gossipsub: Gossipsub,
 }
