@@ -15,9 +15,20 @@ use libp2p::identify::IdentifyEvent;
 use libp2p::identity::ed25519;
 use libp2p::ping;
 use libp2p::ping::{Ping, PingEvent};
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{rendezvous, tokio_development_transport};
+
+struct TokioExecutor();
+
+impl libp2p::core::Executor for TokioExecutor {
+    fn exec(
+        &self,
+        future: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'static + Send>>,
+    ) {
+        tokio::task::spawn(future);
+    }
+}
 
 /// Examples for the rendezvous protocol:
 ///
@@ -54,7 +65,7 @@ async fn main() {
 
         gossipsub.subscribe(&topic).unwrap();
 
-        Swarm::new(
+        SwarmBuilder::new(
             tokio_development_transport(identity.clone()).unwrap(),
             MyBehaviour {
                 identify: Identify::new(IdentifyConfig::new(
@@ -69,6 +80,8 @@ async fn main() {
             },
             PeerId::from(identity.public()),
         )
+        .executor(Box::new(TokioExecutor()))
+        .build()
     };
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
