@@ -261,7 +261,7 @@ impl NetworkBehaviour for Pubsub {
     }
 }
 
-mod wire {
+pub mod wire {
     use std::fmt;
 
     use libp2p::{
@@ -298,9 +298,9 @@ mod wire {
     impl fmt::Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Self::InvalidMessage(_) => write!(f, "Failed to decode message"),
-                Self::EnvelopeError(_) => write!(f, "Failed to decode envelope"),
-                Self::PeerRecordError(_) => write!(f, "Failed to decode peer record"),
+                Self::InvalidMessage(e) => write!(f, "Failed to decode message: {}", e),
+                Self::EnvelopeError(e) => write!(f, "Failed to decode envelope: {}", e),
+                Self::PeerRecordError(e) => write!(f, "Failed to decode peer record: {}", e),
             }
         }
     }
@@ -339,10 +339,21 @@ mod wire {
 
         pub fn into_protobuf_encoding(self) -> Vec<u8> {
             match self {
-                Self::NewNode(new_node) => new_node
-                    .peer
-                    .into_signed_envelope()
-                    .into_protobuf_encoding(),
+                Self::NewNode(new_node) => {
+                    let signed_peer_record = new_node
+                        .peer
+                        .into_signed_envelope()
+                        .into_protobuf_encoding();
+                    let message = crate::proto::NewNode { signed_peer_record };
+
+                    use prost::Message;
+                    let mut buf = Vec::with_capacity(message.encoded_len());
+                    message
+                        .encode(&mut buf)
+                        .expect("Buffer provides enough capacity");
+
+                    buf
+                }
             }
         }
     }

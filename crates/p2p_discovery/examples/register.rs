@@ -32,7 +32,7 @@ async fn main() {
     env_logger::init();
 
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
-    let rendezvous_point = "12D3KooWMUPuN91ijzTjcw1o9DbDVTcFoq1WL6u3yZAy63sNTHLA"
+    let rendezvous_point = "12D3KooWKZbuTW1j1iDzNBahVD3aJhdiKB38pnsdhEzhdToQbDCS"
         .parse()
         .unwrap();
 
@@ -105,14 +105,16 @@ async fn main() {
                 );
                 let external_addresses = swarm
                     .external_addresses()
-                    .map(|r| r.addr)
+                    .map(|r| r.addr.clone())
                     .collect::<Vec<Multiaddr>>();
+                // FIXME: move to Pubsub
                 let new_node_message =
-                    crate::pubsub::wire::Message::new(&identity, external_addresses);
+                    p2p_discovery::pubsub::wire::Message::new(&identity, external_addresses)
+                        .unwrap();
                 if let Err(e) = swarm
                     .behaviour_mut()
                     .gossipsub
-                    .publish(topic.clone(), new_node_message)
+                    .publish(topic.clone(), new_node_message.into_protobuf_encoding())
                 {
                     log::error!("Failed to publish registration {}", e);
                 }
