@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package starknet.discovery;
+
+message NewNode {
+  bytes publicKey = 1;
+  repeated string capabilities = 2;
+  repeated bytes addrs = 3;
+}
+
+message KnownNodes {
+  bytes publicKey = 1;      // id of publishing node
+  repeated bytes nodes = 2; // nodes known to the publishing node
+}
