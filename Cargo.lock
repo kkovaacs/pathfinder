@@ -1995,6 +1995,7 @@ dependencies = [
 name = "p2p_discovery"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "env_logger",
  "futures",
  "libp2p",
