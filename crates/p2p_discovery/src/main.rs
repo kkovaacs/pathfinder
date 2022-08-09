@@ -119,6 +119,18 @@ async fn main() {
                     registrations.len()
                 );
             }
+            SwarmEvent::Behaviour(MyEvent::Gossipsub(GossipsubEvent::Message {
+                propagation_source,
+                message_id,
+                message,
+            })) => {
+                log::info!(
+                    "Received gossipsub message from {:?} id {:?} message {:?}",
+                    propagation_source,
+                    message_id,
+                    message
+                );
+            }
             other => {
                 log::debug!("Unhandled {:?}", other);
             }

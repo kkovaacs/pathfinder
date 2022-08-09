@@ -1994,6 +1994,15 @@ dependencies = [
 [[package]]
 name = "p2p_discovery"
 version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "futures",
+ "libp2p",
+ "log",
+ "prost 0.11.0",
+ "prost-build 0.11.0",
+ "tokio",
+]
 
 [[package]]
 name = "p2p_proto"
