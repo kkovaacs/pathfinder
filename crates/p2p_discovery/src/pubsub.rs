@@ -25,9 +25,13 @@ pub struct NewNode {
     pub peer: PeerRecord,
 }
 
+/// A NetworkBehaviour that encapsulates gossipsub and processes peer discovery messages.
 pub struct Pubsub {
+    /// The pubsub topic we're using to receive/send peer discovery messages.
     topic: IdentTopic,
+    /// The underlying pubsub behaviour.
     gossipsub: Gossipsub,
+    /// Queue of discovered nodes we haven't emitted an event for.
     discovered_nodes: Vec<NewNode>,
 }
 
@@ -62,7 +66,7 @@ impl Pubsub {
         self.gossipsub.subscribe(topic)
     }
 
-    pub fn register_node(
+    pub fn publish_node_data(
         &mut self,
         key: &Keypair,
         external_addresses: Vec<Multiaddr>,
@@ -276,6 +280,7 @@ impl NetworkBehaviour for Pubsub {
     }
 }
 
+/// On-wire serialization and deserialization for discovery messages.
 mod wire {
     use std::fmt;
 

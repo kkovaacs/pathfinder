@@ -80,7 +80,7 @@ async fn main() {
                 if let Err(e) = swarm
                     .behaviour_mut()
                     .pubsub
-                    .register_node(&identity, external_addresses)
+                    .publish_node_data(&identity, external_addresses)
                 {
                     log::error!("Failed to publish registration via pubsub {}", e);
                 }
