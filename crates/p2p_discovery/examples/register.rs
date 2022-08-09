@@ -32,7 +32,7 @@ async fn main() {
     env_logger::init();
 
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
-    let rendezvous_point = "12D3KooWM94bDWG98w9hawSEipLaSyJjfnFQHQpw4kLMpbg4C3RN"
+    let rendezvous_point = "12D3KooWRCxHPAA9E7uqummBxHFV8WLYpoh1QPbTv67ZJ3eYNwHE"
         .parse()
         .unwrap();
 

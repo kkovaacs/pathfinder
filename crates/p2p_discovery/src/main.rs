@@ -1,14 +1,7 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
-use libp2p::gossipsub::GossipsubEvent;
-use libp2p::gossipsub::GossipsubMessage;
-use libp2p::gossipsub::MessageAuthenticity;
-use libp2p::gossipsub::MessageId;
-use libp2p::gossipsub::{Gossipsub, IdentTopic};
+use libp2p::gossipsub::{GossipsubEvent, IdentTopic};
 use libp2p::identify::Identify;
 use libp2p::identify::IdentifyConfig;
 use libp2p::identify::IdentifyEvent;
@@ -18,6 +11,8 @@ use libp2p::ping::{Ping, PingEvent};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{rendezvous, tokio_development_transport};
+
+mod pubsub;
 
 struct TokioExecutor();
 
@@ -45,25 +40,9 @@ async fn main() {
     let identity = identity::Keypair::Ed25519(ed25519::Keypair::generate());
 
     let mut swarm = {
-        let message_id_fn = |message: &GossipsubMessage| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            MessageId::from(s.finish().to_string())
-        };
-        let gossipsub_config = libp2p::gossipsub::GossipsubConfigBuilder::default()
-            .message_id_fn(message_id_fn)
-            .build()
-            .expect("valid gossipsub config");
-
-        let mut gossipsub = Gossipsub::new(
-            MessageAuthenticity::Signed(identity.clone()),
-            gossipsub_config,
-        )
-        .expect("valid gossipsub params");
-
+        let mut pubsub = pubsub::Pubsub::new(identity.clone());
         let topic = IdentTopic::new("_starknet_nodes/SN_GOERLI");
-
-        gossipsub.subscribe(&topic).unwrap();
+        pubsub.subscribe(&topic).unwrap();
 
         SwarmBuilder::new(
             tokio_development_transport(identity.clone()).unwrap(),
@@ -76,7 +55,7 @@ async fn main() {
                     rendezvous::server::Config::default(),
                 ),
                 ping: Ping::new(ping::Config::new().with_keep_alive(true)),
-                gossipsub,
+                pubsub,
             },
             PeerId::from(identity.public()),
         )
@@ -117,18 +96,6 @@ async fn main() {
                     "Served peer {} with {} registrations",
                     enquirer,
                     registrations.len()
-                );
-            }
-            SwarmEvent::Behaviour(MyEvent::Gossipsub(GossipsubEvent::Message {
-                propagation_source,
-                message_id,
-                message,
-            })) => {
-                log::info!(
-                    "Received gossipsub message from {:?} id {:?} message {:?}",
-                    propagation_source,
-                    message_id,
-                    message
                 );
             }
             other => {
@@ -177,5 +144,5 @@ struct MyBehaviour {
     identify: Identify,
     rendezvous: rendezvous::server::Behaviour,
     ping: Ping,
-    gossipsub: Gossipsub,
+    pubsub: pubsub::Pubsub,
 }
