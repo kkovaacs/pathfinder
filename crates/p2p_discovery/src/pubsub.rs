@@ -9,6 +9,7 @@ use libp2p::gossipsub::{
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::{ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p::Multiaddr;
 
 #[derive(Debug)]
 pub enum PubsubEvent {
@@ -25,12 +26,13 @@ pub struct NewNode {
 }
 
 pub struct Pubsub {
+    topic: IdentTopic,
     gossipsub: Gossipsub,
     discovered_nodes: Vec<NewNode>,
 }
 
 impl Pubsub {
-    pub fn new(identity: Keypair) -> Self {
+    pub fn new(identity: Keypair, topic: IdentTopic) -> anyhow::Result<Self> {
         let message_id_fn = |message: &GossipsubMessage| {
             let mut s = DefaultHasher::new();
             message.data.hash(&mut s);
@@ -41,20 +43,36 @@ impl Pubsub {
             .build()
             .expect("valid gossipsub config");
 
-        let gossipsub = Gossipsub::new(
+        let mut gossipsub = Gossipsub::new(
             MessageAuthenticity::Signed(identity.clone()),
             gossipsub_config,
         )
         .expect("valid gossipsub params");
 
-        Self {
+        gossipsub.subscribe(&topic)?;
+
+        Ok(Self {
+            topic,
             gossipsub,
             discovered_nodes: Vec::new(),
-        }
+        })
     }
 
     pub fn subscribe(&mut self, topic: &IdentTopic) -> Result<bool, SubscriptionError> {
         self.gossipsub.subscribe(topic)
+    }
+
+    pub fn register_node(
+        &mut self,
+        key: &Keypair,
+        external_addresses: Vec<Multiaddr>,
+    ) -> anyhow::Result<()> {
+        let new_node_message = wire::Message::new(key, external_addresses)?;
+        self.gossipsub.publish(
+            self.topic.clone(),
+            new_node_message.into_protobuf_encoding(),
+        )?;
+        Ok(())
     }
 }
 
@@ -261,7 +279,7 @@ impl NetworkBehaviour for Pubsub {
     }
 }
 
-pub mod wire {
+mod wire {
     use std::fmt;
 
     use libp2p::{

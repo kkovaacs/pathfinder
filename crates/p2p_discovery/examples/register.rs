@@ -1,62 +1,30 @@
+use std::time::Duration;
+
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
-use libp2p::gossipsub::Gossipsub;
-use libp2p::gossipsub::GossipsubEvent;
-use libp2p::gossipsub::GossipsubMessage;
 use libp2p::gossipsub::IdentTopic;
-use libp2p::gossipsub::MessageAuthenticity;
-use libp2p::gossipsub::MessageId;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::{rendezvous, tokio_development_transport};
 use libp2p::{Multiaddr, NetworkBehaviour};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::time::Duration;
 
-struct TokioExecutor();
-
-impl libp2p::core::Executor for TokioExecutor {
-    fn exec(
-        &self,
-        future: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'static + Send>>,
-    ) {
-        tokio::task::spawn(future);
-    }
-}
+use p2p_discovery::{pubsub, TokioExecutor};
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
-    let rendezvous_point = "12D3KooWKZbuTW1j1iDzNBahVD3aJhdiKB38pnsdhEzhdToQbDCS"
+    let rendezvous_point = "12D3KooWJjJUJ2vUx8iwnX5oLbCurKEw9TE9BKoqAbVF2J9iKxur"
         .parse()
         .unwrap();
 
     let identity = identity::Keypair::generate_ed25519();
 
-    let message_id_fn = |message: &GossipsubMessage| {
-        let mut s = DefaultHasher::new();
-        message.data.hash(&mut s);
-        MessageId::from(s.finish().to_string())
-    };
-    let gossipsub_config = libp2p::gossipsub::GossipsubConfigBuilder::default()
-        .message_id_fn(message_id_fn)
-        .build()
-        .expect("valid gossipsub config");
-
-    let mut gossipsub = Gossipsub::new(
-        MessageAuthenticity::Signed(identity.clone()),
-        gossipsub_config,
-    )
-    .expect("valid gossipsub params");
-
     let topic = IdentTopic::new("_starknet_nodes/SN_GOERLI");
-
-    gossipsub.subscribe(&topic).unwrap();
+    let pubsub = pubsub::Pubsub::new(identity.clone(), topic).unwrap();
 
     let mut swarm = SwarmBuilder::new(
         tokio_development_transport(identity.clone()).unwrap(),
@@ -71,7 +39,7 @@ async fn main() {
                     .with_interval(Duration::from_secs(1))
                     .with_keep_alive(true),
             ),
-            gossipsub,
+            pubsub,
         },
         PeerId::from(identity.public()),
     )
@@ -103,20 +71,18 @@ async fn main() {
                     rendezvous_point,
                     None,
                 );
+
                 let external_addresses = swarm
                     .external_addresses()
                     .map(|r| r.addr.clone())
                     .collect::<Vec<Multiaddr>>();
-                // FIXME: move to Pubsub
-                let new_node_message =
-                    p2p_discovery::pubsub::wire::Message::new(&identity, external_addresses)
-                        .unwrap();
+
                 if let Err(e) = swarm
                     .behaviour_mut()
-                    .gossipsub
-                    .publish(topic.clone(), new_node_message.into_protobuf_encoding())
+                    .pubsub
+                    .register_node(&identity, external_addresses)
                 {
-                    log::error!("Failed to publish registration {}", e);
+                    log::error!("Failed to publish registration via pubsub {}", e);
                 }
             }
             SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::client::Event::Registered {
@@ -155,7 +121,7 @@ enum MyEvent {
     Rendezvous(rendezvous::client::Event),
     Identify(IdentifyEvent),
     Ping(PingEvent),
-    Gossipsub(GossipsubEvent),
+    Pubsub(pubsub::PubsubEvent),
 }
 
 impl From<rendezvous::client::Event> for MyEvent {
@@ -176,9 +142,9 @@ impl From<PingEvent> for MyEvent {
     }
 }
 
-impl From<GossipsubEvent> for MyEvent {
-    fn from(event: GossipsubEvent) -> Self {
-        MyEvent::Gossipsub(event)
+impl From<pubsub::PubsubEvent> for MyEvent {
+    fn from(event: pubsub::PubsubEvent) -> Self {
+        MyEvent::Pubsub(event)
     }
 }
 
@@ -189,5 +155,5 @@ struct MyBehaviour {
     identify: Identify,
     rendezvous: rendezvous::client::Behaviour,
     ping: Ping,
-    gossipsub: Gossipsub,
+    pubsub: pubsub::Pubsub,
 }

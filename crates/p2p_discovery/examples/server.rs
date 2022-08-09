@@ -14,14 +14,6 @@ use libp2p::{rendezvous, tokio_development_transport};
 
 use p2p_discovery::{pubsub, TokioExecutor};
 
-/// Examples for the rendezvous protocol:
-///
-/// 1. Run the rendezvous server:
-///    RUST_LOG=info cargo run --example rendezvous_point
-/// 2. Register a peer:
-///    RUST_LOG=info cargo run --example register_with_identify
-/// 3. Try to discover the peer from (2):
-///    RUST_LOG=info cargo run --example discover
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -29,9 +21,8 @@ async fn main() {
     let identity = identity::Keypair::Ed25519(ed25519::Keypair::generate());
 
     let mut swarm = {
-        let mut pubsub = pubsub::Pubsub::new(identity.clone());
         let topic = IdentTopic::new("_starknet_nodes/SN_GOERLI");
-        pubsub.subscribe(&topic).unwrap();
+        let pubsub = pubsub::Pubsub::new(identity.clone(), topic).unwrap();
 
         SwarmBuilder::new(
             tokio_development_transport(identity.clone()).unwrap(),
