@@ -224,19 +224,16 @@ impl NetworkBehaviour for Pubsub {
                 message_id,
                 message,
             }) => {
-                log::info!(
-                    "Received gossipsub message {:?} from {:?} id {:?}",
-                    message,
-                    propagation_source,
-                    message_id
-                );
-
-                match wire::Message::from_protobuf_encoding(&message.data) {
-                    Ok(message) => match message {
-                        wire::Message::NewNode(new_node) => self.discovered_nodes.push(new_node),
-                    },
-                    Err(e) => {
-                        log::error!("Ignoring invalid discovery message {}", e);
+                if self.topic.hash() == message.topic {
+                    match wire::Message::from_protobuf_encoding(&message.data) {
+                        Ok(message) => match message {
+                            wire::Message::NewNode(new_node) => {
+                                self.discovered_nodes.push(new_node)
+                            }
+                        },
+                        Err(e) => {
+                            log::error!("Ignoring invalid discovery message {}", e);
+                        }
                     }
                 }
 
