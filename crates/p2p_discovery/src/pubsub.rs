@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::task::Poll;
 
@@ -9,7 +10,7 @@ use libp2p::gossipsub::{
 };
 use libp2p::identity::Keypair;
 use libp2p::swarm::{ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction};
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, PeerId};
 
 #[derive(Debug)]
 pub enum PubsubEvent {
@@ -31,8 +32,10 @@ pub struct Pubsub {
     topic: IdentTopic,
     /// The underlying pubsub behaviour.
     gossipsub: Gossipsub,
-    /// Queue of discovered nodes we haven't emitted an event for.
-    discovered_nodes: Vec<NewNode>,
+    /// Queue of discovered peers we haven't emitted an event for.
+    discovered_node_events: Vec<NewNode>,
+    /// Discovered peers
+    discovered_peers: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 impl Pubsub {
@@ -58,7 +61,8 @@ impl Pubsub {
         Ok(Self {
             topic,
             gossipsub,
-            discovered_nodes: Vec::new(),
+            discovered_node_events: Vec::new(),
+            discovered_peers: Default::default(),
         })
     }
 
@@ -88,9 +92,13 @@ impl NetworkBehaviour for Pubsub {
         self.gossipsub.new_handler()
     }
 
-    fn addresses_of_peer(&mut self, _: &libp2p::PeerId) -> Vec<libp2p::Multiaddr> {
-        // FIXME: we should look up peers discovered through gossipsub messages
-        vec![]
+    fn addresses_of_peer(&mut self, peer_id: &libp2p::PeerId) -> Vec<libp2p::Multiaddr> {
+        self.discovered_peers
+            .get(peer_id)
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect()
     }
 
     fn inject_event(
@@ -99,7 +107,6 @@ impl NetworkBehaviour for Pubsub {
         connection: libp2p::core::connection::ConnectionId,
         event: <<Self::ConnectionHandler as libp2p::swarm::IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
-        // FIXME: this should be modified to use our own event type
         self.gossipsub.inject_event(peer_id, connection, event)
     }
 
@@ -216,7 +223,7 @@ impl NetworkBehaviour for Pubsub {
         cx: &mut std::task::Context<'_>,
         params: &mut impl libp2p::swarm::PollParameters,
     ) -> std::task::Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        if let Some(new_node) = self.discovered_nodes.pop() {
+        if let Some(new_node) = self.discovered_node_events.pop() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                 PubsubEvent::Discovery(new_node),
             ));
@@ -232,7 +239,7 @@ impl NetworkBehaviour for Pubsub {
                     match wire::Message::from_protobuf_encoding(&message.data) {
                         Ok(message) => match message {
                             wire::Message::NewNode(new_node) => {
-                                self.discovered_nodes.push(new_node)
+                                self.discovered_node_events.push(new_node)
                             }
                         },
                         Err(e) => {
