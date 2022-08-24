@@ -6,7 +6,7 @@ use futures::StreamExt;
 use libp2p::gossipsub::IdentTopic;
 use libp2p::identify::{IdentifyEvent, IdentifyInfo};
 use libp2p::identity::Keypair;
-use libp2p::kad;
+use libp2p::kad::{self, KademliaEvent};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::Multiaddr;
 use tokio::task::JoinHandle;
@@ -22,12 +22,13 @@ pub fn start(
     keypair: Keypair,
     listen_on: Multiaddr,
     bootstrap_addresses: Vec<Multiaddr>,
+    capabilities: &[&str],
 ) -> anyhow::Result<JoinHandle<()>> {
     let peer_id = keypair.public().to_peer_id();
 
     let mut swarm = SwarmBuilder::new(
         transport::create(&keypair),
-        behaviour::Behaviour::new(&keypair),
+        behaviour::Behaviour::new(&keypair, capabilities),
         peer_id,
     )
     .executor(Box::new(executor::TokioExecutor()))
@@ -65,12 +66,6 @@ async fn main_loop(mut swarm: libp2p::swarm::Swarm<behaviour::Behaviour>) {
             _ = bootstrap_interval_tick => {
                 tracing::debug!("Doing periodical bootstrap");
                 _ = swarm.behaviour_mut().kademlia.bootstrap();
-
-                let network_info = swarm.network_info();
-                let num_peers = network_info.num_peers();
-                let connection_counters = network_info.connection_counters();
-                let num_connections = connection_counters.num_connections();
-                tracing::info!(%num_peers, %num_connections, "Peer-to-peer status")
             }
             Some(event) = swarm.next() => {
                 match event {
@@ -99,8 +94,18 @@ async fn main_loop(mut swarm: libp2p::swarm::Swarm<behaviour::Behaviour>) {
                     SwarmEvent::Behaviour(behaviour::Event::Gossipsub(e)) => {
                         tracing::info!(?e, "Gossipsub event");
                     }
+                    SwarmEvent::Behaviour(behaviour::Event::Kademlia(e)) => {
+                        if let KademliaEvent::OutboundQueryCompleted {..} = e
+                        {
+                            let network_info = swarm.network_info();
+                            let num_peers = network_info.num_peers();
+                            let connection_counters = network_info.connection_counters();
+                            let num_connections = connection_counters.num_connections();
+                            tracing::debug!(%num_peers, %num_connections, "Periodic bootstrap completed")
+                        }
+                    }
                     event => {
-                        tracing::debug!(?event, "Ignoring event");
+                        tracing::trace!(?event, "Ignoring event");
                     }
                 }
             }

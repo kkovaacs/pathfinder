@@ -70,7 +70,13 @@ async fn main() -> anyhow::Result<()> {
     let peer_id = keypair.public().to_peer_id();
     tracing::info!(%peer_id, "Starting up");
 
-    let p2p_task = p2p::start(keypair, args.listen_on, args.bootstrap_addresses)?;
+    let capabilities = ["core/block-propagate/1"];
+    let p2p_task = p2p::start(
+        keypair,
+        args.listen_on,
+        args.bootstrap_addresses,
+        &capabilities,
+    )?;
     p2p_task.await?;
 
     Ok(())
