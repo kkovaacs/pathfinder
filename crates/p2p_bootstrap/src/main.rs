@@ -91,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut swarm = SwarmBuilder::new(
         transport,
-        behaviour::Behaviour::new(keypair.public()),
+        behaviour::BootstrapBehaviour::new(keypair.public()),
         keypair.public().to_peer_id(),
     )
     .executor(Box::new(TokioExecutor()))
@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
             }
             Some(event) = swarm.next() => {
                 match event {
-                    SwarmEvent::Behaviour(behaviour::Event::Identify(e)) => {
+                    SwarmEvent::Behaviour(behaviour::BootstrapEvent::Identify(e)) => {
                         if let IdentifyEvent::Received {
                             peer_id,
                             info:

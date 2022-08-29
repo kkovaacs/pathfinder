@@ -6,14 +6,14 @@ use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::{identity, NetworkBehaviour};
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "Event", event_process = false)]
-pub struct Behaviour {
+#[behaviour(out_event = "BootstrapEvent", event_process = false)]
+pub struct BootstrapBehaviour {
     ping: Ping,
     identify: Identify,
     pub kademlia: Kademlia<MemoryStore>,
 }
 
-impl Behaviour {
+impl BootstrapBehaviour {
     pub fn new(pub_key: identity::PublicKey) -> Self {
         const PROVIDER_PUBLICATION_INTERVAL: Duration = Duration::from_secs(600);
         // FIXME: clarify what version number should be
@@ -43,26 +43,26 @@ impl Behaviour {
 }
 
 #[derive(Debug)]
-pub enum Event {
+pub enum BootstrapEvent {
     Ping(PingEvent),
     Identify(Box<IdentifyEvent>),
     Kademlia(KademliaEvent),
 }
 
-impl From<PingEvent> for Event {
+impl From<PingEvent> for BootstrapEvent {
     fn from(event: PingEvent) -> Self {
-        Event::Ping(event)
+        BootstrapEvent::Ping(event)
     }
 }
 
-impl From<IdentifyEvent> for Event {
+impl From<IdentifyEvent> for BootstrapEvent {
     fn from(event: IdentifyEvent) -> Self {
-        Event::Identify(Box::new(event))
+        BootstrapEvent::Identify(Box::new(event))
     }
 }
 
-impl From<KademliaEvent> for Event {
+impl From<KademliaEvent> for BootstrapEvent {
     fn from(event: KademliaEvent) -> Self {
-        Event::Kademlia(event)
+        BootstrapEvent::Kademlia(event)
     }
 }

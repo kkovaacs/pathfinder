@@ -4,8 +4,6 @@ package starknet;
 
 message FieldElement { bytes elements = 1; }
 
-message PeerID { bytes id = 1; }
-
 message BlockHeader {
   FieldElement parent_block_hash = 1;
   uint64 block_number = 2;
