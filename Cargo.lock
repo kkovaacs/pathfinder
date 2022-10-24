@@ -2967,8 +2967,10 @@ dependencies = [
 name = "p2p_proto"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "prost 0.11.0",
  "prost-build 0.11.1",
+ "stark_hash",
 ]
 
 [[package]]
