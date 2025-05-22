@@ -9,42 +9,42 @@ on:
       - v[0-9]+.*
 
 jobs:
-    create-draft-release:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: taiki-e/create-gh-release-action@v1
-              with:
-                # (Optional) Path to changelog.
-                changelog: CHANGELOG.md
-                # (Optional) Create a draft release.
-                # [default value: false]
-                draft: true
-                # (Required) GitHub token for creating GitHub Releases.
-                token: ${{ secrets.GITHUB_TOKEN }}
+  create-draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          # (Optional) Path to changelog.
+          changelog: CHANGELOG.md
+          # (Optional) Create a draft release.
+          # [default value: false]
+          draft: true
+          # (Required) GitHub token for creating GitHub Releases.
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-    upload-assets:
-        needs: create-draft-release
-        strategy:
-            matrix:
-              include:
-                - target: x86_64-unknown-linux-gnu
-                  os: ubuntu-22.04
-                - target: aarch64-unknown-linux-gnu
-                  os: ubuntu-22.04
-                - target: x86_64-apple-darwin
-                  os: macos-latest
-                - target: aarch64-apple-darwin
-                  os: macos-latest
-        runs-on: ${{ matrix.os }}
-        steps:
-            - uses: actions/checkout@v4
-            - uses: arduino/setup-protoc@v3
-              with:
-                repo-token: ${{ secrets.GITHUB_TOKEN }}
-            - uses: taiki-e/upload-rust-binary-action@v1
-              with:
-                bin: pathfinder
-                target: ${{ matrix.target }}
-                profile: release-lto
-                token: ${{ secrets.GITHUB_TOKEN }}
+  upload-assets:
+    needs: create-draft-release
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: pathfinder
+          target: ${{ matrix.target }}
+          profile: release-lto
+          token: ${{ secrets.GITHUB_TOKEN }}
